@@ -571,10 +571,14 @@ namespace FluentFTP {
 				cts.CancelAfter(ReadTimeout);
 				cts.Token.Register(async () => await CloseAsync(token));
 				try {
-					var res = await BaseStream.ReadAsync(buffer, offset, count, cts.Token);
-					return res;
+					return await BaseStream.ReadAsync(buffer, offset, count, cts.Token);
 				}
 				catch {
+
+					if (cts.IsCancellationRequested) {
+						await CloseAsync(token);
+					}
+
 					// CTS for Cancellation triggered and caused the exception
 					if (token.IsCancellationRequested) {
 						throw new OperationCanceledException("Cancelled read from socket stream");
