@@ -88,6 +88,18 @@ namespace FluentFTP {
 
 				return FtpStatus.Skipped;
 			}
+			else if (existsMode == FtpLocalExists.OverwriteIfSizeDifferent && File.Exists(localPath)) {
+				long remoteFileSize = GetFileSize(remotePath);
+				long localFileSize = FtpFileStream.GetFileSize(localPath, false);
+				if (localFileSize.Equals(remoteFileSize)) {
+					LogWithPrefix(FtpTraceLevel.Info, "Skipping file because Resume is enabled and file is fully downloaded (Remote: " + remotePath + ", Local: " + localPath + ")");
+					if (progress != null) {
+						ReportProgress(progress, 0, 0, 0, TimeSpan.Zero, localPath, remotePath, metaProgress);
+					}
+
+					return FtpStatus.Skipped;
+				}
+			}
 
 			try {
 				// create the folders

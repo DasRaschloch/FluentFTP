@@ -25,6 +25,11 @@ namespace FluentFTP {
 		Skip,
 
 		/// <summary>
+		/// Overwrite the file, if size is different. Otherwise skip.
+		/// </summary>
+		OverwriteIfSizeDifferent,
+
+		/// <summary>
 		/// Append is now renamed to Resume.
 		/// </summary>
 		[ObsoleteAttribute("Append is now renamed to Resume to better reflect its behaviour.", true)]
