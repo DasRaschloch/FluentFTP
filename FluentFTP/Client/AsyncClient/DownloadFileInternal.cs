@@ -19,7 +19,7 @@ namespace FluentFTP {
 		/// Download a file from the server and write the data into the given stream asynchronously.
 		/// Reads data in chunks. Retries if server disconnects midway.
 		/// </summary>
-		protected async Task<bool> DownloadFileInternalAsync(string localPath, string remotePath, Stream outStream, long restartPosition,
+		protected virtual async Task<bool> DownloadFileInternalAsync(string localPath, string remotePath, Stream outStream, long restartPosition,
 			IProgress<FtpProgress> progress, CancellationToken token, FtpProgress metaProgress, long knownFileSize, bool isAppend, long stopPosition) {
 
 			Stream downStream = null;
@@ -80,7 +80,7 @@ namespace FluentFTP {
 
 				const int rateControlResolution = 100;
 				var rateLimitBytes = Config.DownloadRateLimit != 0 ? (long)Config.DownloadRateLimit * 1024 : 0;
-				var chunkSize = CalculateTransferChunkSize(rateLimitBytes, rateControlResolution);
+				var chunkSize = FileTransferModule.CalculateTransferChunkSize(this, rateLimitBytes, rateControlResolution);
 
 				var buffer = new byte[chunkSize];
 				var offset = restartPosition;
@@ -143,7 +143,7 @@ namespace FluentFTP {
 							}
 						}
 
-						if (stopPosition != 0 && offset >= fileLen && readToEnd != true) {
+						if (stopPosition != 0 && offset >= fileLen && !readToEnd) {
 							earlySuccess = true; // We should stop here
 							break;
 						}
@@ -192,7 +192,7 @@ namespace FluentFTP {
 
 				long tot = bytesProcessed;
 				long ems = sw.ElapsedMilliseconds;
-				string bps = ems == 0 ? "?" : (tot / ems * 1000L).FileSizeToString();
+				string bps = ems == 0 ? "?" : (tot * 1000L / ems).FileSizeToString();
 				string successText = "Downloaded " + tot + " bytes, " + sw.Elapsed.ToShortString() + ", " + bps + "/s";
 				if (Config.Noop) {
 					successText += ", " + Status.NoopDaemonAnyNoops + " NOOPs";

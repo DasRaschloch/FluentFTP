@@ -6,6 +6,7 @@ using FluentFTP.Helpers;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentFTP.Exceptions;
+using FluentFTP.Client.Modules;
 
 namespace FluentFTP {
 	public partial class AsyncFtpClient {
@@ -50,7 +51,7 @@ namespace FluentFTP {
 			localFolder = localFolder.EnsurePostfix(Path.DirectorySeparatorChar.ToString());
 
 			// cleanup the remote path
-			remoteFolder = remoteFolder.GetFtpPath().EnsurePostfix("/");
+			remoteFolder = SanitizerModule.SanitizePath(this, remoteFolder).EnsurePostfix("/");
 
 			LogFunction(nameof(DownloadDirectory), new object[] { localFolder, remoteFolder, mode, existsMode, verifyOptions, (rules.IsBlank() ? null : rules.Count + " rules") });
 
@@ -74,7 +75,7 @@ namespace FluentFTP {
 			var shouldExist = new Dictionary<string, bool>();
 
 			// loop through each file and transfer it #1
-			var toDownload = GetFilesToDownload(localFolder, remoteFolder, rules, results, listing, shouldExist);
+			var toDownload = FileDownloadModule.GetFilesToDownload(this, localFolder, remoteFolder, rules, results, listing, shouldExist);
 
 			// break if task is cancelled
 			token.ThrowIfCancellationRequested();

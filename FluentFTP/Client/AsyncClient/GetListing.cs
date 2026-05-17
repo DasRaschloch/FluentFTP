@@ -33,7 +33,7 @@ namespace FluentFTP {
 		public async IAsyncEnumerable<FtpListItem> GetListingEnumerable(string path, FtpListOption options, CancellationToken token = default(CancellationToken), [EnumeratorCancellation] CancellationToken enumToken = default(CancellationToken)) {
 
 			// start recursive process if needed and unsupported by the server
-			if (options.HasFlag(FtpListOption.Recursive) && !IsServerSideRecursionSupported(options)) {
+			if (options.HasFlag(FtpListOption.Recursive) && !ListingModule.IsServerSideRecursionSupported(this, options)) {
 				await foreach (FtpListItem i in GetListingRecursiveEnumerable(await GetAbsolutePathAsync(path, token), options, token, enumToken)) {
 					yield return i;
 				}
@@ -43,7 +43,7 @@ namespace FluentFTP {
 
 			// FIX : #768 NullOrEmpty is valid, means "use working directory".
 			if (!string.IsNullOrEmpty(path)) {
-				path = path.GetFtpPath();
+				path = SanitizerModule.SanitizePath(this, path);
 			}
 
 			LogFunction(nameof(GetListing), new object[] { path, options });
@@ -66,12 +66,12 @@ namespace FluentFTP {
 			var autoNav = Config.ShouldAutoNavigate(path);
 			var autoRestore = Config.ShouldAutoRestore(path);
 
-			if (autoNav) { 
-				options = options | FtpListOption.NoPath;
+			if (autoNav) {
+				options |= FtpListOption.NoPath;
 			}
 
 			bool machineList;
-			CalculateGetListingCommand(path, options, out listcmd, out machineList);
+			ListingModule.CalculateGetListingCommand(this, path, options, out listcmd, out machineList);
 
 			if (autoNav) {
 				pwdSave = await GetWorkingDirectory(token);
@@ -170,13 +170,13 @@ namespace FluentFTP {
 		public async Task<FtpListItem[]> GetListing(string path, FtpListOption options, CancellationToken token = default(CancellationToken)) {
 
 			// start recursive process if needed and unsupported by the server
-			if (options.HasFlag(FtpListOption.Recursive) && !IsServerSideRecursionSupported(options)) {
+			if (options.HasFlag(FtpListOption.Recursive) && !ListingModule.IsServerSideRecursionSupported(this, options)) {
 				return await GetListingRecursive(await GetAbsolutePathAsync(path, token), options, token);
 			}
 
 			// FIX : #768 NullOrEmpty is valid, means "use working directory".
 			if (!string.IsNullOrEmpty(path)) {
-				path = path.GetFtpPath();
+				path = SanitizerModule.SanitizePath(this, path);
 			}
 
 			LogFunction(nameof(GetListing), new object[] { path, options });
@@ -199,12 +199,12 @@ namespace FluentFTP {
 			var autoNav = Config.ShouldAutoNavigate(path);
 			var autoRestore = Config.ShouldAutoRestore(path);
 
-			if (autoNav) { 
-				options = options | FtpListOption.NoPath;
+			if (autoNav) {
+				options |= FtpListOption.NoPath;
 			}
 
 			bool machineList;
-			CalculateGetListingCommand(path, options, out listcmd, out machineList);
+			ListingModule.CalculateGetListingCommand(this, path, options, out listcmd, out machineList);
 
 			if (autoNav) {
 				pwdSave = await GetWorkingDirectory(token);
@@ -410,7 +410,7 @@ namespace FluentFTP {
 			catch (IOException ioEx) {
 				// Some FTP servers forcibly close the connection, we absorb these errors,
 				// unless we have lost the control connection itself
-				if (m_stream.IsConnected == false) {
+				if (!m_stream.IsConnected) {
 					if (retry) {
 						// retry once more, but do not go into a infinite recursion loop here
 						// note: this will cause an automatic reconnect in Execute(...)

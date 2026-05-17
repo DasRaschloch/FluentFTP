@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -30,6 +31,9 @@ namespace FluentFTP {
 		List<FtpCapability> Capabilities { get; }
 		FtpHashAlgorithm HashAlgorithms { get; }
 		event FtpSslValidation ValidateCertificate;
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+		event FtpSslAuthentication ConfigureAuthentication;
+#endif
 		string SystemType { get; }
 		FtpServer ServerType { get; }
 		FtpBaseServer ServerHandler { get; set; }
@@ -42,6 +46,8 @@ namespace FluentFTP {
 		FtpClientState Status { get; }
 		FtpIpVersion? InternetProtocol { get; }
 		bool IsAuthenticated { get; }
+		SslProtocols SslProtocol { get; }
+		string SslCipherSuite { get; }
 		bool IsEncrypted { get; }
 		bool ValidateCertificateHandlerExists { get; }
 		bool RecursiveList { get; }

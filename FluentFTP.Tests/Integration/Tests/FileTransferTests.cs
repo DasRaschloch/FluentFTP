@@ -1,13 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 using FluentFTP.Xunit.Docker;
-using FluentFTP.Xunit.Attributes;
 using FluentFTP.Tests.Integration.System;
 using FluentFTP.Exceptions;
 
@@ -229,6 +227,7 @@ namespace FluentFTP.Tests.Integration.Tests {
 			await using (var dest = await client.OpenWrite(path)) {
 				await dest.WriteAsync(buffer);
 			}
+			await client.GetReply();
 
 			Memory<byte> outBuffer = new byte[buffer.Length];
 			var readBuffer = outBuffer;
@@ -256,6 +255,7 @@ namespace FluentFTP.Tests.Integration.Tests {
 			using (var dest = client.OpenWrite(path)) {
 				dest.Write(buffer);
 			}
+			client.GetReply();
 
 			Span<byte> outBuffer = new byte[buffer.Length];
 			var readBuffer = outBuffer;

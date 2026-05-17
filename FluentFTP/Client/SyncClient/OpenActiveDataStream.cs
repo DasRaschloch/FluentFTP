@@ -126,6 +126,7 @@ namespace FluentFTP {
 
 			stream.EndAccept(ar);
 #endif
+			stream.ConnectionState = FtpConnectionState.Connected;
 
 			if (Config.DataConnectionEncryption && Config.EncryptionMode != FtpEncryptionMode.None && !Status.ConnectionFTPSFailure) {
 				stream.ActivateEncryption(m_host,
@@ -135,6 +136,7 @@ namespace FluentFTP {
 
 			stream.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, Config.SocketKeepAlive);
 			stream.ReadTimeout = Config.DataConnectionReadTimeout;
+			stream.WriteTimeout = Config.DataConnectionWriteTimeout;
 
 			return stream;
 		}

@@ -19,6 +19,7 @@ namespace FluentFTP.Client.Modules {
 			"failed to open file",
 			"not found",
 			"no such file",
+			"couldn't open the file",
 			"cannot find the file",
 			"cannot find",
 			"can't get file",
@@ -38,21 +39,6 @@ namespace FluentFTP.Client.Modules {
 			"could not find the path",
 			"file doesnot exist",
 			"couldn't open the file or directory"
-		};
-
-		#endregion
-
-		#region File Size
-
-		/// <summary>
-		/// Error messages returned by various servers when a file size is not supported in ASCII mode.
-		/// MUST BE LOWER CASE!
-		/// </summary>
-		public static string[] fileSizeNotInASCII = new[] {
-			"not allowed in ascii",
-			"size not allowed in ascii",
-			"n'est pas autorisé en mode ascii",
-			"не разрешено в режиме ascii"
 		};
 
 		#endregion
@@ -87,19 +73,6 @@ namespace FluentFTP.Client.Modules {
 			"file already exist",
 			"directory already exist",
 			"folder already exist",
-		};
-
-		#endregion
-
-		#region TLS Exception
-
-		/// <summary>
-		/// Error messages returned by various servers when the connection failed due to wrong TLS version used.
-		/// MUST BE LOWER CASE!
-		/// </summary>
-		public static string[] failedTLS = new[] {
-			"die angeforderte funktion wird nicht unterstützt",
-			"the function requested is not supported",
 		};
 
 		#endregion

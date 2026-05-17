@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Xunit;
 using FluentFTP.Tests.Integration.System;
 
@@ -14,6 +10,7 @@ namespace FluentFTP.Tests.Integration {
 		private static bool UseSsl = true;
 
 		// These can do both FTP and FTPS
+
 		[Fact]
 		public async Task ProFtpd() {
 			await IntegrationTestRunner.Run(FtpServer.ProFTPD, UseStream.SslStream);
@@ -40,10 +37,7 @@ namespace FluentFTP.Tests.Integration {
 		}
 
 		// These can only do FTPS
-		[Fact]
-		public async Task FileZillaSsl() {
-			await IntegrationTestRunner.Run(FtpServer.FileZilla, UseStream.SslStream);
-		}
+
 		// Works, but needs some TLC. Image does not always start reliably, hangs
 		//[Fact]
 		//public async Task GlftpdSsl() {

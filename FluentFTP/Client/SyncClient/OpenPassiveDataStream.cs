@@ -8,6 +8,7 @@ using FluentFTP.Helpers;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentFTP.Exceptions;
+using FluentFTP.Client.Modules;
 
 namespace FluentFTP {
 	public partial class FtpClient {
@@ -53,7 +54,7 @@ namespace FluentFTP {
 					}
 
 					// read the connection port from the EPSV response
-					GetEnhancedPassivePort(reply, out host, out port);
+					PassivePortModule.GetEnhancedPassivePort(this, reply, out host, out port);
 
 				}
 				else {
@@ -72,7 +73,7 @@ namespace FluentFTP {
 					}
 
 					// get the passive port taking proxy config into account (if any)
-					GetPassivePort(type, reply, out host, out port);
+					PassivePortModule.GetPassivePort(this, type, reply, out host, out port);
 
 				}
 
@@ -108,6 +109,7 @@ namespace FluentFTP {
 			stream = new FtpDataStream(this);
 			stream.ConnectTimeout = Config.DataConnectionConnectTimeout;
 			stream.ReadTimeout = Config.DataConnectionReadTimeout;
+			stream.WriteTimeout = Config.DataConnectionWriteTimeout;
 			Connect(stream, host, port, Config.InternetProtocolVersions);
 			stream.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, Config.SocketKeepAlive);
 

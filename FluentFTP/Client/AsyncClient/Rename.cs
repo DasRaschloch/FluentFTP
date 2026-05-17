@@ -28,8 +28,8 @@ namespace FluentFTP {
 				throw new ArgumentException("Required parameter is null or blank.", nameof(dest));
 			}
 
-			path = path.GetFtpPath();
-			dest = dest.GetFtpPath();
+			path = SanitizerModule.SanitizePath(this, path);
+			dest = SanitizerModule.SanitizePath(this, dest);
 
 			LogFunction(nameof(Rename), new object[] { path, dest });
 

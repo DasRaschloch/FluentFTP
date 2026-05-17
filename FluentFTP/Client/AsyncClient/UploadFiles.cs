@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Data;
 using FluentFTP.Rules;
+using FluentFTP.Client.Modules;
 
 namespace FluentFTP {
 	public partial class AsyncFtpClient {
@@ -52,7 +53,7 @@ namespace FluentFTP {
 				throw new ArgumentException("Required parameter is null or blank.", nameof(remoteDir));
 			}
 
-			remoteDir = remoteDir.GetFtpPath();
+			remoteDir = SanitizerModule.SanitizePath(this, remoteDir);
 
 			LogFunction(nameof(UploadFiles), new object[] { localPaths, remoteDir, existsMode, createRemoteDir, verifyOptions, errorHandling });
 
@@ -82,7 +83,7 @@ namespace FluentFTP {
 			var filesToUpload = await GetFilesToUpload2Async(localPaths, remoteDir, rules, results, shouldExist, token);
 
 			// get all the already existing files (if directory was created just create an empty array)
-			var existingFiles = checkFileExistence ? await GetNameListing(remoteDir, token) : new string[0];
+			var existingFiles = checkFileExistence ? await GetNameListing(remoteDir, token) : Array.Empty<string>();
 
 			// per local file
 			var r = -1;
@@ -97,11 +98,13 @@ namespace FluentFTP {
 
 				// try to upload it
 				try {
-					var ok = await UploadFileFromFile(result.LocalPath, result.RemotePath, false, existsMode, FileListings.FileExistsInNameListing(existingFiles, result.RemotePath), true, verifyOptions, token, progress, metaProgress);
+					var existsInListing = FileListings.FileExistsInNameListing(this, existingFiles, result.RemotePath);
+					var ok = await UploadFileFromFile(result.LocalPath, result.RemotePath, false, existsMode, existsInListing, true, verifyOptions, token, progress, metaProgress);
 
 					// mark that the file succeeded
 					result.IsSuccess = ok.IsSuccess();
-					result.IsSkipped = ok == FtpStatus.Skipped;
+					result.IsSkipped = ok.IsSkipped();
+					result.IsFailed = ok.IsFailure();
 
 					if (ok.IsSuccess()) {
 						successfulUploads.Add(result.RemotePath);
@@ -213,7 +216,7 @@ namespace FluentFTP {
 				remoteFilePath = await GetAbsoluteFilePathAsync(remoteDir, fileName, token);
 
 				// record that this file should be uploaded
-				RecordFileToUpload(rules, results, shouldExist, filesToUpload, localPath, remoteFilePath);
+				FileUploadModule.RecordFileToUpload(this, rules, results, shouldExist, filesToUpload, localPath, remoteFilePath);
 			}
 
 			return filesToUpload;

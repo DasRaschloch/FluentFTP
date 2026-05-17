@@ -16,7 +16,7 @@ namespace FluentFTP {
 		/// <param name="token">The token that can be used to cancel the entire process</param>
 		public async Task SetWorkingDirectory(string path, CancellationToken token = default(CancellationToken)) {
 
-			path = path.GetFtpPath();
+			path = SanitizerModule.SanitizePath(this, path);
 
 			LogFunction(nameof(SetWorkingDirectory), new object[] { path });
 
@@ -25,6 +25,12 @@ namespace FluentFTP {
 			// exit if invalid path
 			if (path is "." or "./") {
 				return;
+			}
+
+			// If PreserveTrailingSlashCmdList enabled for CWD... but: Don't do it for root dir and any
+			// directories that already end with a slash (which shouldn't happen, but let's be safe)
+			if (Config.PreserveTrailingSlashCmdList != null && Config.PreserveTrailingSlashCmdList.Contains("CWD") && !path.EndsWith("/")) {
+				path += "/";
 			}
 
 			// modify working dir

@@ -8,30 +8,30 @@ using Timer = System.Threading.Timer;
 namespace FluentFTP.Monitors {
 	public abstract class BaseFtpMonitor {
 
-		internal Dictionary<string, long> _lastListing = new Dictionary<string, long>();
-		internal Dictionary<string, long> _unstableFiles = new Dictionary<string, long>();
+		protected Dictionary<string, long> _lastListing = new Dictionary<string, long>();
+		protected Dictionary<string, long> _unstableFiles = new Dictionary<string, long>();
 
-		internal Timer _timer;
+		protected Timer _timer;
 
 		/// <summary>
 		/// Is the monitoring started?
 		/// </summary>
-		public bool Active { get; internal set; }
+		public bool Active { get; protected set; }
 
 		/// <summary>
-		/// Gets the monitored FTP folder path
+		/// Gets the monitored FTP folder path(s)
 		/// </summary>
-		public string FolderPath { get; internal set; }
+		public List<string> FolderPaths { get; protected set; }
 
 		/// <summary>
-		/// Gets or sets the polling interval in seconds
+		/// Gets or sets the polling interval. Default is 10 minutes.
 		/// </summary>
-		public int PollInterval { get; set; } = 60;
+		public TimeSpan PollInterval { get; set; } = TimeSpan.FromMinutes(10);
 
 		/// <summary>
-		/// Gets or sets whether to wait for files to be fully uploaded before reporting
+		/// Whether to wait for list items to be fully uploaded (having a stable file size) before reporting them as added.
 		/// </summary>
-		public bool WaitTillFileFullyUploaded { get; set; } = false;
+		public bool WaitForUpload { get; set; } = true;
 
 		/// <summary>
 		/// Gets or sets whether to recursively monitor subfolders
@@ -39,15 +39,15 @@ namespace FluentFTP.Monitors {
 		public bool Recursive { get; set; } = false;
 
 
-		internal void StartTimer(TimerCallback callback) {
-			_timer = new Timer(callback, null, TimeSpan.Zero, TimeSpan.FromSeconds(PollInterval));
+		protected void StartTimer(TimerCallback callback) {
+			_timer = new Timer(callback, null, PollInterval, PollInterval);
 		}
 
-		internal void StopTimer() {
+		protected void StopTimer() {
 			_timer?.Dispose();
 			_timer = null;
 		}
-		internal FtpListOption GetListingOptions(List<FtpCapability> caps) {
+		protected virtual FtpListOption GetListingOptions(List<FtpCapability> caps) {
 			FtpListOption options = FtpListOption.Modify | FtpListOption.Size;
 
 			if (Recursive) {
@@ -65,16 +65,16 @@ namespace FluentFTP.Monitors {
 		}
 
 		/// <summary>
-		/// Handles unstable files when WaitTillFileFullyUploaded is true
+		/// Handles unstable files when WaitForUpload is true
 		/// </summary>
-		internal Dictionary<string, long> HandleUnstableFiles(Dictionary<string, long> currentListing) {
+		protected virtual Dictionary<string, long> HandleUnstableFiles(Dictionary<string, long> currentListing) {
 			var stableFiles = new Dictionary<string, long>();
 
 			foreach (var file in currentListing) {
 				if (_unstableFiles.TryGetValue(file.Key, out long previousSize)) {
 					if (previousSize == file.Value) {
 						// File size is stable, move to stable files
-						stableFiles[file.Key] = file.Value;
+						stableFiles.Add(file.Key, file.Value);
 						_unstableFiles.Remove(file.Key);
 					}
 					else {
@@ -84,11 +84,11 @@ namespace FluentFTP.Monitors {
 				}
 				else if (!_lastListing.ContainsKey(file.Key)) {
 					// New file, add to unstable files
-					_unstableFiles[file.Key] = file.Value;
+					_unstableFiles.Add(file.Key, file.Value);
 				}
 				else {
 					// Existing file, add to stable files
-					stableFiles[file.Key] = file.Value;
+					stableFiles.Add(file.Key, file.Value);
 				}
 			}
 
@@ -100,7 +100,5 @@ namespace FluentFTP.Monitors {
 
 			return stableFiles;
 		}
-
-
 	}
 }

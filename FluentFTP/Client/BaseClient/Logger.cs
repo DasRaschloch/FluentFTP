@@ -2,11 +2,24 @@
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
+
 using FluentFTP.Helpers;
 using FluentFTP.Helpers.Logging;
 
 namespace FluentFTP.Client.BaseClient {
 	public partial class BaseFtpClient {
+
+#if NET462
+		private static bool IsUnix { get; } = (int)Environment.OSVersion.Platform == 4 || (int)Environment.OSVersion.Platform == 6 || (int)Environment.OSVersion.Platform == 128;
+		private static bool IsLinux { get; } = (int)Environment.OSVersion.Platform == 4 || (int)Environment.OSVersion.Platform == 128;
+		private static bool IsOSX { get; } = (int)Environment.OSVersion.Platform == 6;
+#else
+		private static bool IsUnix { get; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+		private static bool IsLinux { get; } = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+		private static bool IsOSX { get; } = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+#endif
+		private static bool IsMono { get; } = Type.GetType("Mono.Runtime") != null;
 
 		/// <summary>
 		/// Log the version of the running assembly
@@ -15,6 +28,7 @@ namespace FluentFTP.Client.BaseClient {
 			if (AnyLoggingIsEnabled()) {
 				string applicationVersion = Assembly.GetAssembly(MethodBase.GetCurrentMethod().DeclaringType).GetName().Version.ToString();
 				string target;
+
 #if NET20
 				target = ".NET Framework 2.0";
 #elif NET35
@@ -85,12 +99,51 @@ namespace FluentFTP.Client.BaseClient {
 				target = ".NET 7.0";
 #elif NET8_0
 				target = ".NET 8.0";
-#elif NET8_0_OR_GREATER
-				target = ".NET 8.0+";
+#elif NET9_0
+				target = ".NET 9.0";
+#elif NET10_0_OR_GREATER
+				target = ".NET 10.0+";
 #else
 				target = "Unknown";
 #endif
-				LogWithPrefix(FtpTraceLevel.Verbose, "FluentFTP " + applicationVersion + "(" + target + ") " + this.ClientType);
+
+				string platform = "Unknown";
+
+				if (IsUnix) {
+					// Unix platforms
+					if (IsLinux) {
+						// Linux
+						if (IsMono) {
+							// Mono under Linux)
+							platform = "Mono/Linux";
+						}
+						else {
+							platform = "Linux";
+						}
+					}
+					else if (IsOSX) {
+						if (IsMono) {
+							// Mono under OSX
+							platform = "Mono/OSX";
+						}
+						else {
+							// OSX
+							platform = "OSX";
+						}
+					}
+				}
+				else {
+					if (IsMono) {
+						// Mono under Windows
+						platform = "Mono/Windows";
+					}
+					else {
+						// Windows
+						platform = "Windows";
+					}
+				}
+
+				LogWithPrefix(FtpTraceLevel.Verbose, "FluentFTP " + applicationVersion + "(" + platform + "/" + target + ") " + this.ClientType);
 			}
 		}
 
@@ -141,7 +194,7 @@ namespace FluentFTP.Client.BaseClient {
 		}
 
 		/// <summary>
-		/// Log a message
+		/// Log a raw message.
 		/// </summary>
 		/// <param name="eventType">The type of tracing event</param>
 		/// <param name="message">The message to write</param>
@@ -161,9 +214,9 @@ namespace FluentFTP.Client.BaseClient {
 		/// </summary>
 		/// <param name="eventType">The type of tracing event</param>
 		/// <param name="message">The message to write</param>
-		/// <param name="exception">An optional exeption</param>
-		/// <param name="exNewLine">Write an optional exeption on a new line</param>
-		protected void LogWithPrefix(FtpTraceLevel eventType, string message, Exception exception = null, bool exNewLine = false) {
+		/// <param name="exception">An optional exception</param>
+		/// <param name="exNewLine">Write the exception on a new line</param>
+		public void LogWithPrefix(FtpTraceLevel eventType, string message, Exception exception = null, bool exNewLine = false) {
 			if (AnyLoggingIsEnabled()) {
 				// log to attached logger if given
 				m_logger?.Log(eventType, message, exception);

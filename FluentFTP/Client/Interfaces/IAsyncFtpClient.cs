@@ -19,15 +19,6 @@ namespace FluentFTP {
 	public interface IAsyncFtpClient : IDisposable, IBaseFtpClient {
 #endif
 
-
-		new void Dispose();
-
-#if NETSTANDARD2_1_OR_GREATER || NET5_0_OR_GREATER
-		new ValueTask DisposeAsync();
-#else
-		Task DisposeAsync();
-#endif
-
 		// METHODS
 
 		bool HasFeature(FtpCapability cap);
@@ -41,6 +32,7 @@ namespace FluentFTP {
 		Task Connect(bool reConnect, CancellationToken token = default(CancellationToken));
 		Task Disconnect(CancellationToken token = default(CancellationToken));
 		Task<FtpReply> Execute(string command, CancellationToken token = default(CancellationToken));
+		Task<FtpReply> Execute(string command, int linesExpected, CancellationToken token = default(CancellationToken));
 		Task<List<string>> ExecuteDownloadText(string command, CancellationToken token = default(CancellationToken));
 		Task<FtpReply> GetReply(CancellationToken token = default(CancellationToken));
 

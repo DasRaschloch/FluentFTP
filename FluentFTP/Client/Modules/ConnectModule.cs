@@ -31,11 +31,9 @@ namespace FluentFTP.Client.Modules {
 		public static List<FtpProfile> AutoDetect(FtpClient client, FtpAutoDetectConfig config) {
 			var results = new List<FtpProfile>();
 
-			if (config == null) {
-				config = new FtpAutoDetectConfig();
-			}
+			config ??= new FtpAutoDetectConfig();
 
-			List<FtpEncryptionMode> encryptionsPriority = DefaultEncryptionsPriority.ShallowClone(); ;
+			List<FtpEncryptionMode> encryptionsPriority = DefaultEncryptionsPriority.ShallowClone();
 
 			if (!config.RequireEncryption) {
 				encryptionsPriority.Add(FtpEncryptionMode.None);
@@ -168,11 +166,9 @@ namespace FluentFTP.Client.Modules {
 		public static async Task<List<FtpProfile>> AutoDetectAsync(AsyncFtpClient client, FtpAutoDetectConfig config, CancellationToken token) {
 			var results = new List<FtpProfile>();
 
-			if (config == null) {
-				config = new FtpAutoDetectConfig();
-			}
+			config ??= new FtpAutoDetectConfig();
 
-			List<FtpEncryptionMode> encryptionsPriority = DefaultEncryptionsPriority.ShallowClone(); ;
+			List<FtpEncryptionMode> encryptionsPriority = DefaultEncryptionsPriority.ShallowClone();
 
 			if (!config.RequireEncryption) {
 				encryptionsPriority.Add(FtpEncryptionMode.None);
@@ -218,7 +214,7 @@ namespace FluentFTP.Client.Modules {
 						continue;
 					}
 
-					((IInternalFtpClient)conn).LogStatus(FtpTraceLevel.Verbose, "Auto-Detect trying encryption mode \"" + encryption.ToString() + "\"" + ((encryption == FtpEncryptionMode.None) ? string.Empty : " with \"" + protocol.ToString() + "\""));
+					((IInternalFtpClient)conn).LogStatus(FtpTraceLevel.Verbose, "Auto-Detect trying encryption mode \"" + encryption.ToString() + "\"" + ((encryption == FtpEncryptionMode.None) ? string.Empty : " with protocol \"" + protocol.ToString() + "\""));
 
 					// reset port so it auto computes based on encryption type
 					if (resetPort) {
@@ -403,6 +399,15 @@ namespace FluentFTP.Client.Modules {
 				return ex;
 			}
 
+			// catch CCC failed
+			if (ex is FtpException && ex.Message.Contains("Fallback")) {
+				return ex;
+			}
+			// catch CCC failed
+			if (ex is NotImplementedException && ex.Message.Contains("SSL Encryption deactivation not supported")) {
+				return ex;
+			}
+
 			return null;
 		}
 
@@ -453,8 +458,10 @@ namespace FluentFTP.Client.Modules {
 			if (profile.Timeout != 0) {
 				client.Config.ConnectTimeout = profile.Timeout;
 				client.Config.ReadTimeout = profile.Timeout;
+				client.Config.WriteTimeout = profile.Timeout;
 				client.Config.DataConnectionConnectTimeout = profile.Timeout;
 				client.Config.DataConnectionReadTimeout = profile.Timeout;
+				client.Config.DataConnectionWriteTimeout = profile.Timeout;
 			}
 			if (client.Config.RetryAttempts != 0) {
 				client.Config.RetryAttempts = profile.RetryAttempts;
@@ -465,8 +472,8 @@ namespace FluentFTP.Client.Modules {
 		/// Create a default ValidateCertificate handler that accepts valid certificates.
 		/// </summary>
 		public static void SetDefaultCertificateValidation(BaseFtpClient client, FtpProfile profile) {
-			if (profile.Encryption != FtpEncryptionMode.None && client.ValidateCertificateHandlerExists == false) {
-				client.ValidateCertificate += new FtpSslValidation(delegate (BaseFtpClient c, FtpSslValidationEventArgs e) {
+			if (profile.Encryption != FtpEncryptionMode.None && !client.ValidateCertificateHandlerExists) {
+				client.ValidateCertificate += new FtpSslValidation((BaseFtpClient _, FtpSslValidationEventArgs e) => {
 					if (e.PolicyErrors != System.Net.Security.SslPolicyErrors.None) {
 						e.Accept = false;
 					}

@@ -5,6 +5,7 @@ using System.Linq;
 using FluentFTP.Helpers;
 using FluentFTP.Exceptions;
 using FluentFTP.Rules;
+using FluentFTP.Client.Modules;
 
 namespace FluentFTP {
 	public partial class FtpClient {
@@ -37,7 +38,7 @@ namespace FluentFTP {
 
 			// verify args
 			if (!errorHandling.IsValidCombination()) {
-				throw new ArgumentException("Invalid combination of FtpError flags.  Throw & Stop cannot be combined");
+				throw new ArgumentException("Invalid combination of FtpError flags.  Throw & Stop cannot be combined", nameof(errorHandling));
 			}
 
 			if (localDir.IsBlank()) {
@@ -57,7 +58,7 @@ namespace FluentFTP {
 			localDir = !localDir.EndsWith(Path.DirectorySeparatorChar.ToString()) ? localDir + Path.DirectorySeparatorChar.ToString() : localDir;
 
 			// check which files should be downloaded or filtered out based on rules
-			var filesToDownload = GetFilesToDownload2(localDir, remotePaths, rules, results, shouldExist);
+			var filesToDownload = FileDownloadModule.GetFilesToDownload2(this, localDir, remotePaths, rules, results, shouldExist);
 
 			// per remote file
 			var r = -1;
@@ -70,10 +71,11 @@ namespace FluentFTP {
 				// try to download it
 				try {
 					var ok = DownloadFileToFile(result.LocalPath, result.RemotePath, existsMode, verifyOptions, progress, metaProgress);
-					
+
 					// mark that the file succeeded
 					result.IsSuccess = ok.IsSuccess();
-					result.IsSkipped = ok == FtpStatus.Skipped;
+					result.IsSkipped = ok.IsSkipped();
+					result.IsFailed = ok.IsFailure();
 
 					if (ok.IsSuccess()) {
 						successfulDownloads.Add(result.LocalPath);
@@ -84,7 +86,7 @@ namespace FluentFTP {
 					}
 				}
 				catch (Exception ex) {
-				
+
 					// mark that the file failed
 					result.IsFailed = true;
 					result.Exception = ex;

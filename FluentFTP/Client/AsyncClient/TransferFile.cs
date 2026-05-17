@@ -30,8 +30,8 @@ namespace FluentFTP {
 		public async Task<FtpStatus> TransferFile(string sourcePath, AsyncFtpClient remoteClient, string remotePath,
 			bool createRemoteDir = false, FtpRemoteExists existsMode = FtpRemoteExists.Resume, FtpVerify verifyOptions = FtpVerify.None, IProgress<FtpProgress> progress = null, FtpProgress metaProgress = null, CancellationToken token = default(CancellationToken)) {
 
-			sourcePath = sourcePath.GetFtpPath();
-			remotePath = remotePath.GetFtpPath();
+			sourcePath = SanitizerModule.SanitizePath(this, sourcePath);
+			remotePath = SanitizerModule.SanitizePath(this, remotePath);
 
 			LogFunction(nameof(TransferFile), new object[] { sourcePath, remoteClient, remotePath, Config.FXPDataType, createRemoteDir, existsMode, verifyOptions });
 
@@ -92,8 +92,9 @@ namespace FluentFTP {
 				try {
 
 					ftpFxpSession.SourceServer.Config.ReadTimeout = (int)TimeSpan.FromMinutes(30.0).TotalMilliseconds;
+					ftpFxpSession.SourceServer.Config.WriteTimeout = (int)TimeSpan.FromMinutes(30.0).TotalMilliseconds;
 					ftpFxpSession.TargetServer.Config.ReadTimeout = (int)TimeSpan.FromMinutes(30.0).TotalMilliseconds;
-
+					ftpFxpSession.TargetServer.Config.WriteTimeout = (int)TimeSpan.FromMinutes(30.0).TotalMilliseconds;
 
 					// check if the file exists, and skip, overwrite or append
 					if (existsMode == FtpRemoteExists.ResumeNoCheck) {

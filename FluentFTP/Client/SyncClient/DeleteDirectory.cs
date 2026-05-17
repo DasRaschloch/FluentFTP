@@ -19,7 +19,7 @@ namespace FluentFTP {
 				throw new ArgumentException("Required parameter is null or blank.", nameof(path));
 			}
 
-			path = path.GetFtpPath();
+			path = SanitizerModule.SanitizePath(this, path);
 
 			LogFunction(nameof(DeleteDirectory), new object[] { path });
 			DeleteDirInternal(path, true, FtpListOption.Recursive, true, true);
@@ -36,7 +36,7 @@ namespace FluentFTP {
 				throw new ArgumentException("Required parameter is null or blank.", nameof(path));
 			}
 
-			path = path.GetFtpPath();
+			path = SanitizerModule.SanitizePath(this, path);
 
 			LogFunction(nameof(DeleteDirectory), new object[] { path, options });
 			DeleteDirInternal(path, true, options, true, true);
@@ -53,7 +53,7 @@ namespace FluentFTP {
 		protected void DeleteDirInternal(string path, bool deleteContents, FtpListOption options, bool deleteFinalDir, bool firstCall) {
 			FtpReply reply;
 
-			path = path.GetFtpPath();
+			path = SanitizerModule.SanitizePath(this, path);
 
 			// server-specific directory deletion
 			// don't use it if requested to leave the top level dir, because
@@ -73,7 +73,7 @@ namespace FluentFTP {
 				// when GetListing is called with recursive option, then it does not
 				// make any sense to call another DeleteDirectory with force flag set.
 				// however this requires always delete files first.
-				var recurse = !WasGetListingRecursive(options);
+				var recurse = !ListingModule.WasGetListingRecursive(options);
 
 				// items that are deeper in directory tree are listed first, 
 				// then files will be listed before directories. This matters

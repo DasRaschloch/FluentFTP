@@ -62,13 +62,13 @@ namespace FluentFTP {
 		public FtpListItem[] GetListing(string path, FtpListOption options) {
 
 			// start recursive process if needed and unsupported by the server
-			if (options.HasFlag(FtpListOption.Recursive) && !IsServerSideRecursionSupported(options)) {
+			if (options.HasFlag(FtpListOption.Recursive) && !ListingModule.IsServerSideRecursionSupported(this, options)) {
 				return GetListingRecursive(GetAbsolutePath(path), options);
 			}
 
 			// FIX : #768 NullOrEmpty is valid, means "use working directory".
 			if (!string.IsNullOrEmpty(path)) {
-				path = path.GetFtpPath();
+				path = SanitizerModule.SanitizePath(this, path);
 			}
 
 			LogFunction(nameof(GetListing), new object[] { path, options });
@@ -98,7 +98,7 @@ namespace FluentFTP {
 			}
 
 			bool machineList;
-			CalculateGetListingCommand(path, options, out listcmd, out machineList);
+			ListingModule.CalculateGetListingCommand(this, path, options, out listcmd, out machineList);
 
 			if (autoNav) {
 				pwdSave = GetWorkingDirectory();
@@ -283,7 +283,7 @@ namespace FluentFTP {
 			catch (IOException ioEx) {
 				// Some FTP servers forcibly close the connection, we absorb these errors,
 				// unless we have lost the control connection itself
-				if (m_stream.IsConnected == false) {
+				if (!m_stream.IsConnected) {
 					if (retry) {
 						// retry once more, but do not go into a infinite recursion loop here
 						// note: this will cause an automatic reconnect in Execute(...)

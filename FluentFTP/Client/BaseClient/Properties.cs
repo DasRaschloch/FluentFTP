@@ -272,16 +272,26 @@ namespace FluentFTP.Client.BaseClient {
 		/// </summary>
 		public List<FtpCapability> Capabilities {
 			get {
+				// See issues #683 and 1698 for the following logic
+				// See also Execute(...) for similar connect logic
 
-				// FIX #683: if capabilities are already loaded, don't check if connected and return straight away
-				if (m_capabilities != null && m_capabilities.Count > 0) {
+				// We have possible distinct capabilities, that must have been set by a connect
+				if (Status.ConnectCount > 0) {
 					return m_capabilities;
 				}
 
-				// FIX #683: while using async operations, it is possible that the stream is not
-				// connected, so don't connect using synchronous connection logic
-				if (m_stream == null) {
-					throw new FtpException("Please call Connect() before trying to read the Capabilities!");
+				if (m_stream == null || !m_stream.IsConnected) {
+					if (Config.SelfConnectMode == FtpSelfConnectMode.Never ||
+						((Status.ConnectCount == 0) && Config.SelfConnectMode == FtpSelfConnectMode.OnConnectionLost)) {
+						throw new FtpException("A call to Connect(...) is needed prior to calling this API!");
+					}
+
+					if (ClientType is "AsyncFtpClient") {
+						Task.Run(async () => await ((IInternalFtpClient)this).ConnectInternal(true, CancellationToken.None)).Wait();
+					}
+					else {
+						((IInternalFtpClient)this).ConnectInternal(true);
+					}
 				}
 
 				return m_capabilities;
@@ -300,21 +310,49 @@ namespace FluentFTP.Client.BaseClient {
 		/// </summary>
 		public FtpHashAlgorithm HashAlgorithms {
 			get {
+				// See issues #683 and 1698 for the following logic
+				// See also Execute(...) for similar connect logic
 
-				// FIX #683: if hash types are already loaded, don't check if connected and return straight away
-				if (m_hashAlgorithms != FtpHashAlgorithm.NONE) {
+				// We have possible distinct hash algos, that must have been set by a connect
+				if (Status.ConnectCount > 0) {
 					return m_hashAlgorithms;
 				}
 
-				// FIX #683: while using async operations, it is possible that the stream is not
-				// connected, so don't connect using synchronous connection logic
 				if (m_stream == null || !m_stream.IsConnected) {
-					throw new FtpException("Please call Connect() before trying to read the HashAlgorithms!");
+					if (Config.SelfConnectMode == FtpSelfConnectMode.Never ||
+						((Status.ConnectCount == 0) && Config.SelfConnectMode == FtpSelfConnectMode.OnConnectionLost)) {
+						throw new FtpException("A call to Connect(...) is needed prior to calling this API!");
+					}
+
+					if (ClientType is "AsyncFtpClient") {
+						Task.Run(async () => await ((IInternalFtpClient)this).ConnectInternal(true, CancellationToken.None)).Wait();
+					}
+					else {
+						((IInternalFtpClient)this).ConnectInternal(true);
+					}
 				}
 
 				return m_hashAlgorithms;
 			}
 			protected set => m_hashAlgorithms = value;
+		}
+
+		/// <summary>
+		/// The currently negotiated SSL/TLS protocol version.
+		/// Will return a valid value after connection is complete.
+		/// Before connection it will return `SslProtocols.None`.
+		/// </summary>
+		public SslProtocols SslProtocol {
+			get { return m_stream != null ? m_stream.SslProtocol : SslProtocols.None; }
+		}
+
+		/// <summary>
+		/// The currently negotiated SSL/TLS cipher suite.
+		/// Will return a valid value after connection is complete.
+		/// Before connection it will return `string.Empty`.
+		/// </summary>
+		public string SslCipherSuite {
+			get { return m_stream != null ? m_stream.SslCipherSuite : string.Empty; }
 		}
 
 		/// <summary>
@@ -344,6 +382,39 @@ namespace FluentFTP.Client.BaseClient {
 			add => m_ValidateCertificate += value;
 			remove => m_ValidateCertificate -= value;
 		}
+
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+		protected FtpSslAuthentication m_ConfigureAuthentication = null;
+
+		/// <summary>
+		/// Event is fired when SSL client authentication options need to be configured before the TLS handshake.
+		/// This allows customization of SSL options such as CipherSuitesPolicy for legacy FTPS servers
+		/// that only support RSA key-exchange ciphers (e.g., on Linux where .NET's default cipher list may not include RSA suites).
+		/// <para>
+		/// Example usage for legacy RSA-only servers:
+		/// <code>
+		/// ftp.ConfigureSslClientAuthenticationOptions += (client, e) =>
+		/// {
+		/// #if NET5_0_OR_GREATER
+		///     e.Options.CipherSuitesPolicy = new CipherSuitesPolicy(new[]
+		///     {
+		///         TlsCipherSuite.TLS_RSA_WITH_AES_256_GCM_SHA384,
+		///         TlsCipherSuite.TLS_RSA_WITH_AES_128_GCM_SHA256,
+		///     });
+		/// #endif
+		/// };
+		/// </code>
+		/// </para>
+		/// <para>
+		/// <b>Security Note:</b> Enabling RSA key-exchange ciphers reduces security (no forward secrecy).
+		/// Only use this for interop with legacy FTPS servers that cannot be upgraded.
+		/// </para>
+		/// </summary>
+		public event FtpSslAuthentication ConfigureAuthentication {
+			add => m_ConfigureAuthentication += value;
+			remove => m_ConfigureAuthentication -= value;
+		}
+#endif
 
 		protected string m_systemType = "UNKNOWN";
 
@@ -381,7 +452,8 @@ namespace FluentFTP.Client.BaseClient {
 			}
 		}
 
-		/// <summary> Gets the last replies received from the server</summary>
+		/// <summary> Gets the last replies received from the server. We allocate this
+		/// to have 5 slots. If you need more, allocate your own with more.</summary>
 		public List<FtpReply> LastReplies { get; set; }
 
 		/// <summary>
@@ -431,6 +503,20 @@ namespace FluentFTP.Client.BaseClient {
 		/// </summary>
 		public IPEndPoint SocketRemoteEndPoint {
 			get => m_stream?.RemoteEndPoint;
+		}
+
+		/// <summary>
+		/// Returns the IPAD to be sent to the server for the active connection.
+		/// </summary>
+		public string GetLocalAddress(IPAddress ipad) {
+
+			// Use resolver
+			if (Config.AddressResolver != null) {
+				return m_Address ??= Config.AddressResolver();
+			}
+
+			// Use supplied IPAD
+			return ipad.ToString();
 		}
 
 	}

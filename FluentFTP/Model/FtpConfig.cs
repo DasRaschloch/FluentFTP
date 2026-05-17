@@ -192,7 +192,7 @@ namespace FluentFTP {
 		public bool DisconnectWithQuit { get; set; } = true;
 
 		/// <summary>
-		/// Gets or sets the length of time in milliseconds to wait for a connection 
+		/// Gets or sets the length of time in milliseconds to wait for a connection
 		/// attempt to succeed before giving up. Default is 0 (Use OS default timeout)
 		/// See: https://github.com/robinrodricks/FluentFTP/wiki/FTP-Connection#connection-timeout-settings
 		/// and: https://github.com/robinrodricks/FluentFTP/wiki/FTP-Connection#faq_timeoutwindows
@@ -206,6 +206,17 @@ namespace FluentFTP {
 		public int ReadTimeout { get; set; } = 15000;
 
 		/// <summary>
+		/// Gets or sets the length of time wait in milliseconds for data to be
+		/// written to the underlying stream. The default value is -1 (Use OS default timeout = infinite).
+		/// </summary>
+		public int WriteTimeout { get; set; } = -1;
+
+		/// <summary>
+		/// Use CCC command to deactivate encryption after connection and authentication
+		/// </summary>
+		public bool EncryptAuthenticationOnly { get; set; } = false;
+
+		/// <summary>
 		/// Gets or sets the length of time in milliseconds for a data connection
 		/// to be established before giving up. Default is 15000 (15 seconds).
 		/// </summary>
@@ -213,15 +224,22 @@ namespace FluentFTP {
 
 		/// <summary>
 		/// Gets or sets the length of time in milliseconds the data channel
-		/// should wait for the server to send data. Default value is 
+		/// should wait for the server to send data. Default value is
 		/// 15000 (15 seconds).
 		/// </summary>
 		public int DataConnectionReadTimeout { get; set; } = 15000;
 
+		/// <summary>
+		/// Gets or sets the length of time in milliseconds the data channel
+		/// should wait for the server to be sent data. Default value is
+		/// -1 (Use OS default timeout = infinite).
+		/// </summary>
+		public int DataConnectionWriteTimeout { get; set; } = -1;
+
 		protected bool _keepAlive = false;
 
 		/// <summary>
-		/// Gets or sets a value indicating if <see cref="System.Net.Sockets.SocketOptionName.KeepAlive"/> should be set on 
+		/// Gets or sets a value indicating if <see cref="System.Net.Sockets.SocketOptionName.KeepAlive"/> should be set on
 		/// the underlying stream's socket. If the connection is alive, the option is
 		/// adjusted in real-time. The value is stored and the KeepAlive option is set
 		/// accordingly upon any new connections. The value set here is also applied to
@@ -256,7 +274,11 @@ namespace FluentFTP {
 		/// Encryption protocols to use. Only valid if EncryptionMode property is not equal to <see cref="FtpEncryptionMode.None"/>.
 		/// Default value is .NET Framework defaults from the <see cref="System.Net.Security.SslStream"/> class.
 		/// </summary>
+#if NET7_0_OR_GREATER
+		public SslProtocols SslProtocols { get; set; } = SslProtocols.Tls12;
+#else
 		public SslProtocols SslProtocols { get; set; } = SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls;
+#endif
 
 		/// <summary>
 		/// Gets or sets the max number of socket write/read transactions
@@ -296,7 +318,7 @@ namespace FluentFTP {
 		protected FtpParser _parser = FtpParser.Auto;
 
 		/// <summary>
-		/// File listing parser to be used. 
+		/// File listing parser to be used.
 		/// Automatically calculated based on the type of the server at the time of connection.
 		/// If you want to override this property, make sure to do it after calling Connect.
 		/// </summary>
@@ -346,86 +368,71 @@ namespace FluentFTP {
 		/// <returns>Return an FtpListItem object if the line can be parsed, else return null</returns>
 		public delegate FtpListItem CustomParser(string line, List<FtpCapability> capabilities, BaseFtpClient client);
 
-		protected double _serverTimeZone = 0;
-		protected TimeSpan _serverTimeOffset = new TimeSpan();
 
 		/// <summary>
-		/// The timezone of the FTP server. If the server is in Tokyo with UTC+9 then set this to 9.
-		/// If the server returns timestamps in UTC then keep this 0.
-		/// </summary>
-		public double TimeZone {
-			get => _serverTimeZone;
-			set {
-				if (value < -14 || value > 14) {
-					throw new ArgumentOutOfRangeException(nameof(value), "TimeZone must be within -14 to +14 to represent UTC-14 to UTC+14");
-				}
-				_serverTimeZone = value;
-
-				// configure parser
-				if (value == 0) {
-					_serverTimeOffset = TimeSpan.Zero;
-				}
-				else {
-					var hours = (int)Math.Floor(_serverTimeZone);
-					var mins = (int)Math.Floor((_serverTimeZone - Math.Floor(_serverTimeZone)) * 60);
-					_serverTimeOffset = new TimeSpan(hours, mins, 0);
-				}
-			}
-		}
-
-		public TimeSpan GetServerTimeOffset() {
-			return _serverTimeOffset;
-		}
-
-
-#if NETSTANDARD || NET5_0_OR_GREATER
-		protected double _localTimeZone = 0;
-		protected TimeSpan _localTimeOffset = new TimeSpan();
-
-		/// <summary>
-		/// The timezone of your machine. If your machine is in Tokyo with UTC+9 then set this to 9.
-		/// If your machine is synchronized with UTC then keep this 0.
-		/// </summary>
-		public double LocalTimeZone {
-			get => _localTimeZone;
-			set {
-				if (value < -14 || value > 14) {
-					throw new ArgumentOutOfRangeException(nameof(value), "LocalTimeZone must be within -14 to +14 to represent UTC-14 to UTC+14");
-				}
-				_localTimeZone = value;
-
-				// configure parser
-				if (value == 0) {
-					_localTimeOffset = TimeSpan.Zero;
-				}
-				else {
-					var hours = (int)Math.Floor(_localTimeZone);
-					var mins = (int)Math.Floor((_localTimeZone - Math.Floor(_localTimeZone)) * 60);
-					_localTimeOffset = new TimeSpan(hours, mins, 0);
-				}
-			}
-		}
-		public TimeSpan GetLocalTimeOffset() {
-			return _localTimeOffset;
-		}
-#endif
-
-		/// <summary>
-		/// Server timestamps are converted into the given timezone.
-		/// ServerTime will return the original timestamp.
-		/// LocalTime will convert the timestamp into your local machine's timezone.
-		/// UTC will convert the timestamp into UTC format (GMT+0).
-		/// You need to set TimeZone and LocalTimeZone (.NET core only) for these to work.
+		/// Configures the type of timezone conversion done on all timestamps sent/recieved from the FTP server.
+		/// `ServerTime` will return the original timestamp as reported by the FTP server.
+		/// `LocalTime` will convert the timestamp into your local machine's timezone.
+		/// `UTC` will convert the timestamp into UTC format (GMT+0).
+		/// You need to set `ServerTimeZone` and `ClientTimeZone` for these to work.
 		/// </summary>
 		public FtpDate TimeConversion { get; set; } = FtpDate.ServerTime;
+
+		protected TimeZoneInfo _serverTimeZone = TimeZoneInfo.Utc;
+		protected TimeZoneInfo _clientTimeZone = TimeZoneInfo.Local;
+
+		/// <summary>
+		/// The timezone of the FTP server. Defaults to UTC.
+		/// If the server returns timestamps in UTC then keep this `TimeZoneInfo.Utc`.
+		/// Use `SetServerTimeZone` to easily set this property.
+		/// </summary>
+		public TimeZoneInfo ServerTimeZone {
+			get => _serverTimeZone;
+			set {
+				_serverTimeZone = value ?? throw new ArgumentNullException(nameof(value), "ServerTimeZone cannot be null.");
+			}
+		}
+
+		/// <summary>
+		/// The timezone of your client machine. Defaults to `TimeZoneInfo.Local`.
+		/// If your machine is synchronized with UTC then keep this `TimeZoneInfo.Utc`.
+		/// Use `SetClientTimeZone` to easily set this property.
+		/// </summary>
+		public TimeZoneInfo ClientTimeZone {
+			get => _clientTimeZone;
+			set {
+				_clientTimeZone = value ?? throw new ArgumentNullException(nameof(value), "ClientTimeZone cannot be null.");
+			}
+		}
+
+#if NET5_0_OR_GREATER
+		/// <summary>
+		/// Sets the server timezone reliably on Windows or Unix.
+		/// </summary>
+		/// <param name="windowsTimezone">The Windows timezone ID (e.g., "Tokyo Standard Time").</param>
+		/// <param name="unixTimezone">The Unix timezone ID (e.g., "Asia/Tokyo").</param>
+		public void SetServerTimeZone(string windowsTimezone, string unixTimezone) {
+			ServerTimeZone = TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? windowsTimezone : unixTimezone);
+		}
+
+		/// <summary>
+		/// Sets the client timezone reliably on Windows or Unix.
+		/// </summary>
+		/// <param name="windowsTimezone">The Windows timezone ID (e.g., "Pacific Standard Time").</param>
+		/// <param name="unixTimezone">The Unix timezone ID (e.g., "America/Los_Angeles").</param>
+		public void SetClientTimeZone(string windowsTimezone, string unixTimezone) {
+			ClientTimeZone = TimeZoneInfo.FindSystemTimeZoneById(OperatingSystem.IsWindows() ? windowsTimezone : unixTimezone);
+		}
+#endif
 
 		/// <summary>
 		/// If true, increases performance of GetListing by reading multiple lines
 		/// of the file listing at once. If false then GetListing will read file
 		/// listings line-by-line. If GetListing is having issues with your server,
 		/// set it to false.
-		/// 
+		/// <para>
 		/// The number of bytes read is based upon <see cref="BulkListingLength"/>.
+		/// </para>
 		/// </summary>
 		public bool BulkListing { get; set; } = true;
 
@@ -466,7 +473,7 @@ namespace FluentFTP {
 		}
 
 		/// <summary>
-		/// Defines which verification types should be performed when 
+		/// Defines which verification types should be performed when
 		/// uploading/downloading files using the high-level APIs.
 		/// Multiple verification types can be combined.
 		/// </summary>
@@ -561,13 +568,69 @@ namespace FluentFTP {
 		/// </summary>
 		public IFtpStreamConfig CustomStreamConfig { get; set; } = null;
 
+		/// <summary>
+		/// Configure how and when the FTP client should attempt to reconnect to the FTP server.
+		/// </summary>
+		public FtpSelfConnectMode SelfConnectMode { get; set; } = FtpSelfConnectMode.OnConnectionLost;
+
+		private List<string> _preserveTrailingSlashCmdList = null;
+
+		/// <summary>
+		/// Some servers, when taking a path spec as paramter, require a trailing slash.
+		/// Specify an empty list or null if normal processing is request, i.e. any posix
+		/// trailing slashes will be removed (exeption: root "/"). Specify, as an example,
+		/// PreserveTrailingSlashCmdList = new List&lt;string&gt; { "CWD" };
+		/// to have all CWD commands include a trailing slash.
+		/// </summary>
+		public List<string> PreserveTrailingSlashCmdList {
+			get => _preserveTrailingSlashCmdList;
+			set => _preserveTrailingSlashCmdList = value;
+		}
+
+		/// <summary>
+		/// [SECURITY] Prevents FTP command-injection attacks by removing any characters after an ASCII control character in filepaths.
+		/// Disabling this will weaken system security.
+		/// See the "Security" page on FluentFTP wiki for details.
+		/// </summary>
+		public bool SanitizeControlChars { get; set; } = true;
+
+		/// <summary>
+		/// [SECURITY] Prevents FTP command-injection attacks by only retaining the first line of any multiline path.
+		/// This prevents attackers from adding payloads consisting of rogue commands after the first line.
+		/// If you are disabling this, you will also need to disable `SanitizeControlChars`.
+		/// Disabling this will weaken system security.
+		/// See the "Security" page on FluentFTP wiki for details.
+		/// </summary>
+		public bool SanitizeMultiline { get; set; } = true;
+
+		/// <summary>
+		/// [SECURITY] Prevents FTP Unicode-spoofing attacks by removing Unicode control characters from filepaths.
+		/// Disabling this will weaken system security.
+		/// See the "Security" page on FluentFTP wiki for details.
+		/// </summary>
+		public bool SanitizeUnicodeSpoofing { get; set; } = true;
+
+		/// <summary>
+		/// [SECURITY] Prevents FTP URL-encoded attacks by performing a URL decode on filepaths.
+		/// Disabling this will weaken system security.
+		/// See the "Security" page on FluentFTP wiki for details.
+		/// </summary>
+		public bool SanitizeUrlEncoding { get; set; } = true;
+
+		/// <summary>
+		/// [SECURITY] Prevents FTP directory-traversal attacks by removing directory traversal prefixes in filepaths.
+		/// This prevents attackers from using relative FTP filepaths to access sensitive folders outside the scope of their current FTP folder.
+		/// This means you cannot upload or download using paths like "../../secretFolder/secretFile.txt".
+		/// Disabling this will weaken system security.
+		/// See the "Security" page on FluentFTP wiki for details.
+		/// </summary>
+		public bool SanitizeTraversal { get; set; } = true;
 
 
 
 		//-------------------------------------------------------------//
 		// ADD NEW PROPERTIES INTO THIS FUNCTION: FtpConfig.CopyTo()
 		//-------------------------------------------------------------//
-
 
 
 		/// <summary>
@@ -608,8 +671,10 @@ namespace FluentFTP {
 			write.DisconnectWithQuit = read.DisconnectWithQuit;
 			write.ConnectTimeout = read.ConnectTimeout;
 			write.ReadTimeout = read.ReadTimeout;
+			write.WriteTimeout = read.WriteTimeout;
 			write.DataConnectionConnectTimeout = read.DataConnectionConnectTimeout;
 			write.DataConnectionReadTimeout = read.DataConnectionReadTimeout;
+			write.DataConnectionWriteTimeout = read.DataConnectionWriteTimeout;
 			write.SocketKeepAlive = read.SocketKeepAlive;
 			write.EncryptionMode = read.EncryptionMode;
 			write.DataConnectionEncryption = read.DataConnectionEncryption;
@@ -622,8 +687,9 @@ namespace FluentFTP {
 			write.ListingParser = read.ListingParser;
 			write.ListingCulture = read.ListingCulture;
 			write.ListingCustomParser = read.ListingCustomParser;
-			write.TimeZone = read.TimeZone;
 			write.TimeConversion = read.TimeConversion;
+			write.ClientTimeZone = read.ClientTimeZone;
+			write.ServerTimeZone = read.ServerTimeZone;
 			write.BulkListing = read.BulkListing;
 			write.BulkListingLength = read.BulkListingLength;
 			write.TransferChunkSize = read.TransferChunkSize;
@@ -649,14 +715,28 @@ namespace FluentFTP {
 			write.PostConnect = read.PostConnect;
 			write.CustomStream = read.CustomStream;
 			write.CustomStreamConfig = read.CustomStreamConfig;
-
-#if NETSTANDARD || NET5_0_OR_GREATER
-			write.LocalTimeZone = read.LocalTimeZone;
-#endif
+			write.SelfConnectMode = read.SelfConnectMode;
+			write.SanitizeControlChars = read.SanitizeControlChars;
+			write.SanitizeMultiline = read.SanitizeMultiline;
+			write.SanitizeUnicodeSpoofing = read.SanitizeUnicodeSpoofing;
+			write.SanitizeUrlEncoding = read.SanitizeUrlEncoding;
+			write.SanitizeTraversal = read.SanitizeTraversal;
 
 			// copy certificates from self
 			write.ClientCertificates.Clear();
 			write.ClientCertificates.AddRange(read.ClientCertificates);
+
+			write.AddressResolver = read.AddressResolver;
+			write.CheckCapabilities = read.CheckCapabilities;
+			write.EncryptAuthenticationOnly = read.EncryptAuthenticationOnly;
+			write.LogDurations = read.LogDurations;
+			if (read.PreserveTrailingSlashCmdList == null) {
+				write.PreserveTrailingSlashCmdList = null;
+			}
+			else {
+				write.PreserveTrailingSlashCmdList = new List<string>();
+				write.PreserveTrailingSlashCmdList.AddRange(read.PreserveTrailingSlashCmdList);
+			}
 
 		}
 
@@ -676,7 +756,6 @@ namespace FluentFTP {
 				return autoRestore;
 			}
 			return false;
-			
 		}
 	}
 }

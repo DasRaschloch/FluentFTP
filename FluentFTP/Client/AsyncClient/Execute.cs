@@ -2,7 +2,9 @@
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+
 using FluentFTP.Client.Modules;
+using FluentFTP.Exceptions;
 using FluentFTP.Helpers;
 
 namespace FluentFTP {
@@ -15,6 +17,17 @@ namespace FluentFTP {
 		/// <param name="token">The token that can be used to cancel the entire process</param>
 		/// <returns>The servers reply to the command</returns>
 		public async Task<FtpReply> Execute(string command, CancellationToken token = default(CancellationToken)) {
+			return await Execute(command, -1, token);
+		}
+
+		/// <summary>
+		/// Performs an asynchronous execution of the specified command
+		/// </summary>
+		/// <param name="command">The command to execute</param>
+		/// <param name="linesExpected">-1 normal operation, 0 accumulate until timeOut, >0 accumulate until n msgs received</param>
+		/// <param name="token">The token that can be used to cancel the entire process</param>
+		/// <returns>The servers reply to the command</returns>
+		public async Task<FtpReply> Execute(string command, int linesExpected, CancellationToken token = default(CancellationToken)) {
 			FtpReply reply;
 
 			bool reconnect = false;
@@ -67,6 +80,11 @@ namespace FluentFTP {
 				}
 				LogWithPrefix(FtpTraceLevel.Warn, "Reconnect needed due to " + reconnectReason + " control connection" + sslLengthInfo);
 
+				if (Config.SelfConnectMode == FtpSelfConnectMode.Never ||
+				   ((Status.ConnectCount == 0) && Config.SelfConnectMode == FtpSelfConnectMode.OnConnectionLost)) {
+					throw new FtpException("A " + ((Status.ConnectCount == 0) ? "C" : "Rec") + "onnect needed but forbidden by the client config (\"SelfConnectMode\")");
+				}
+
 				if (IsConnected) {
 					if (Status.LastWorkingDir == null) {
 						Status.InCriticalSequence = true;
@@ -106,7 +124,7 @@ namespace FluentFTP {
 				LastCommandTimestamp = DateTime.UtcNow;
 
 				// get the reply
-				reply = await ((IInternalFtpClient)this).GetReplyInternal(token, command, false, 0, false);
+				reply = await ((IInternalFtpClient)this).GetReplyInternal(token, command, false, 0, false, linesExpected);
 			}
 			finally {
 				m_daemonSemaphore.Release();
@@ -133,11 +151,14 @@ namespace FluentFTP {
 
 			// CWD LastWorkingDir
 			if (command.ToUpper().TrimEnd() == "CWD" || command.ToUpper().StartsWith("CWD ", StringComparison.Ordinal)) {
-				// At least for a successful absolute Unix CWD, we know where we are.
-				string parms = command.Length <= 4 ? string.Empty : command.Substring(4);
-				if (parms.IsAbsolutePath()) {
-					Status.LastWorkingDir = parms;
-					return;
+				if (Config.PreserveTrailingSlashCmdList == null || !Config.PreserveTrailingSlashCmdList.Contains("CWD")) {
+					// Only assume the following for normal processing
+					// At least for a successful absolute Unix CWD, we know where we are.
+					string parms = command.Length <= 4 ? string.Empty : command.Substring(4);
+					if (parms.IsAbsolutePath()) {
+						Status.LastWorkingDir = parms;
+						return;
+					}
 				}
 
 				// Sadly, there are cases where a successful CWD does not let us easily

@@ -35,10 +35,13 @@ namespace FluentFTP.Model.Functions {
 		/// List of protocols to be tried, and the order they should be tried in.
 		/// </summary>
 		public List<SysSslProtocols> ProtocolPriority { get; set; } = new List<SysSslProtocols> {
+#if NET7_0_OR_GREATER
+			SysSslProtocols.Tls12,
+#else
 			SysSslProtocols.Tls11 | SysSslProtocols.Tls12,
+#endif
 			// Do not EVER use "Default". It boils down to "SSL or TLS1.0" or worse.
 			// Do not use "None" - it can connect to TLS13, but Session Resume won't work, so a successful AutoDetect will be a false truth.
 		};
-
 	}
 }

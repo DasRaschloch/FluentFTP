@@ -7,6 +7,7 @@ using FluentFTP.Exceptions;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentFTP.Rules;
+using FluentFTP.Client.Modules;
 
 namespace FluentFTP {
 	public partial class AsyncFtpClient {
@@ -63,7 +64,7 @@ namespace FluentFTP {
 			localDir = !localDir.EndsWith(Path.DirectorySeparatorChar.ToString()) ? localDir + Path.DirectorySeparatorChar.ToString() : localDir;
 
 			// check which files should be downloaded or filtered out based on rules
-			var filesToDownload = GetFilesToDownload2(localDir, remotePaths, rules, results, shouldExist);
+			var filesToDownload = FileDownloadModule.GetFilesToDownload2(this, localDir, remotePaths, rules, results, shouldExist);
 
 			// per remote file
 			var r = -1;
@@ -82,7 +83,8 @@ namespace FluentFTP {
 
 					// mark that the file succeeded
 					result.IsSuccess = ok.IsSuccess();
-					result.IsSkipped = ok == FtpStatus.Skipped;
+					result.IsSkipped = ok.IsSkipped();
+					result.IsFailed = ok.IsFailure();
 
 					if (ok.IsSuccess()) {
 						successfulDownloads.Add(result.LocalPath);

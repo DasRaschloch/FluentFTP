@@ -1,5 +1,122 @@
 # Release Notes
 
+#### 54.1.2
+
+ - **Xamarin**
+   - Improve error handling during FTP connection to fix intermittent hanging on Xamarin
+   - Improve `LogVersion` in Logger for Mono/Xamarin
+   - Improve file upload status messages to help debug upload failures
+ - **Optimization**
+   - Fix memory leak in `CancellationTokenSource` affecting `AsyncFtpClient` and `GnuTLS`
+   - Fix multiple memory leaks after extensive testing
+ - **Maintenance**
+   - Fix C# code generation for `FtpProfile.ToCode` to generate encoding code correctly
+   - Update log4net from 2.0.15 to 3.3.0 in example projects
+   - Add .NET 9 and .NET 10 to log version message
+
+#### 54.1.1
+
+ - **FTP Connection**
+   - Fix: Copy missing properties in `FtpConfig.CopyTo`
+
+#### 54.1.0
+
+ - **FTP Security**
+   - New: `SanitizeControlChars`, `SanitizeMultiline`, `SanitizeUnicodeSpoofing`, `SanitizeTraversal` and `SanitizeUrlEncoding` Properties to configure FTP path sanitization at a granular level
+   - Change: Refactor path and command sanitization logic into new `SanitizerModule`
+   - Change: Only clean slashes when sanitizing folder paths of already-sanitized paths
+   - Change: Remove outdated Properties `TimeZone` and `LocalTimeZone`
+ - **Testing**
+   - New: `PathInsecureTests` to ensure that the sanitizer is disabled based on config properties
+
+#### 54.0.3
+
+ - **FTP Security**
+   - Change: Allowed the `&` character in filenames by default
+ - **FTP Connection**
+   - Fix: `NullReferenceException` in FTPS disconnect when accessing `SslSessionLength`
+   - Fix: Improve CCC command handling for custom streams
+
+#### 54.0.2
+
+ - **FTP Security**
+   - New: Secure FTP path sanitizer to protect against FTP command injection, traversal, encoding bypasses, and parser confusion attacks
+   - Security: Major changes to FTP path handling, many new restrictions are introduced (see "Security" page on FluentFTP Wiki)
+   - Security: FTP command sanitization implemented in `Execute` API
+   - Security: FTP path sanitization implemented in all major API: `CreateDirectory`, `DeleteDirectory`, `DeleteFile`, `DirectoryExists`, `DownloadBytes`, `DownloadDirectory`, `DownloadFile`, `DownloadStream`, `EmptyDirectory`, `FileExists`, `GetChecksum`, `GetFilePermissions`, `GetFileSize`, `GetListing`, `GetModifiedTime`, `GetNameListing`, `GetObjectInfo`, `MoveDirectory`, `MoveFile`, `OpenAppend`, `OpenRead`, `OpenWrite`, `Rename`, `SetFilePermissions`, `SetModifiedTime`, `SetWorkingDirectory`, `TransferDirectory`, `TransferFile`, `UploadBytes`, `UploadDirectory`, `UploadFiles`, `UploadStream`, `CompareFile` 
+ - **Code cleanup**
+   - Change: Renamed primary overload of `GetFtpPath` to `SanitizeFtpPath` to better convey its intended function
+   - Change: Renamed secondary overload of `GetFtpPath` to `AppendFtpPath` to better convey its intended function
+ - **FTP Connection**
+   - New: Add `ConfigureAuthentication` event handler to FTP clients to customize `SslClientAuthenticationOptions` before TLS handshake and enable support for Linux for legacy FTPS servers
+   - New: Updated TLS handshake code to use `SslClientAuthenticationOptions` pattern in both synchronous and async methods
+
+#### 53.0.2
+
+ - Fix missing await and async in Async `GetReply`
+ - Fix timer/polling issue in `AsyncFtpMonitor.StartTimer`
+ - Rework `AsyncFtpMonitor` and `FtpMonitor` access modifiers to virtual for easy overriding
+ - Drop support for .NET 5, .NET 6 and add support for .NET 9 builds
+
+#### 53.0.1
+
+ - **FTP Protocol**
+   - New: Handle no-reply from FTP server by adding new overload to `Execute()` (thanks @FanDjango)
+   - Fix: `NetworkStream` `ReadAsync` infinite timeout when server is unresponsive (thanks @Gino1024)
+   - Fix: Preserve trailing slashes for special servers (thanks @FanDjango)
+   - New: Add `Config.PreserveTrailingSlashCmdList` setting (thanks @FanDjango)
+   - Fix: Improved handling of multiline FTP server responses (thanks @FanDjango and @kowalski-se)
+   - Fix: `GetChecksum()` cannot parse FTP server response if the path contains spaces (thanks @FanDjango)
+ - **FTP Connection**
+   - New: Implement `Config.EncryptAuthenticationOnly` (thanks @FanDjango)
+   - Fix: CCC failure: `NotImplementedException ` (thanks @FanDjango)
+   - Fix: NOOP command failure does not indicate disconnection (thanks @FanDjango)
+   - Fix: Make sure a `OperationCancelledException` is thrown when cancelling a `AsyncConnect()` (thanks @bruinsg)
+ - **Testing**
+   - New: Add fake FTP clients suitable for mocking (`FakeAsyncFtpClient` and `FakeFtpClient`)
+   - Fix: Update XUnit from 2.4.1 to 2.9.3 (thanks @FanDjango)
+   - Fix: All integration tests fixed for Docker 4.42.0 (thanks @FanDjango)
+   - Fix: Date parser unit tests (thanks @FanDjango)
+   - Remove FileZilla Integration Test as there is no pre-made docker image (thanks @FanDjango)
+ - **Code cleanup**
+   - Fix: Use `Task.Delay` instead of `Thread.Sleep` (thanks @jnyrup)
+   - Fix: Various syntax cleanups and modernizations (thanks @jnyrup)
+   - Fix: Do not call `CancellationToken.Register` with async delegate (thanks @jnyrup)
+
+#### 52.1.0
+
+ - **Connection**
+   - Add `SslProtocol` and `SslCipherSuite` properties.
+   - Set TLS1.1 as obsolete in .NET 7+ targets
+   - Fix: Crashing host process on FTP socket timeout
+ - **Commands**
+   - Fix: Remove language specific checks and improve detection of File Exists check
+ - **Reconnection**
+   - Change: Prevent auto connecting the FTP Client when `HashAlgorithms` is read
+   - Add: New option `FtpSelfConnectMode` to control how FTP reconnections are handled
+ - **Testing**	
+   - Fix incorrect call sequence in `FileTransferTests`
+   
+#### 52.0.0
+
+ - **Time Zones**
+   - New: Time Zone conversion is performed using standard .NET `TimeZoneInfo` instead of hourly offset values
+   - New: `ClientTimeZone` and `ServerTimeZone` Properties to configure Time Zone conversion
+   - New: `SetClientTimeZone` and `SetServerTimeZone` Utility methods to configure Time Zone conversion
+ - **FTP Monitoring**
+   - New: FTP monitors to detect added/updated/deleted files in remote FTP folders and send events to your application accordingly (`FtpMonitor`, `AsyncFtpMonitor`, `BlockingAsyncFtpMonitor`)
+   - New: FTP monitor event with details on changed files (`FtpMonitorEventArgs`)
+   - New: Sample code for `BlockingAsyncFtpMonitor`
+ - **Testing**
+   - Fix: Total rewrite of FileZilla FTP server docker for integration testing (thanks @FanDjango)
+   - Fix: Updated tests for new TimeZone API
+ - **Maintainance**
+   - Change: Allow overriding of download/upload internal methods in FTP client subclasses (`DownloadFileInternal` and `UploadFileInternal`)
+   - Change: Refactor file transfer and file listing utilities into static module classes
+   - Change: Improve performance of dictionary lookups (thanks @ssg)
+   - Fix: `LogMaskModule` throwing exception when `UserName` is empty (thanks @ssg)
+   - Fix: Improve `AsyncFtpClient` dispose logic and cleanup warnings on build (thanks @FanDjango)
+
 #### 51.1.0
 
  - Fix: GUI hangs during `Dispose` of `AsyncFtpClient`

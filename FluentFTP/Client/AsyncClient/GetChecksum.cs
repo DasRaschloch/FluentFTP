@@ -37,7 +37,7 @@ namespace FluentFTP {
 
 			ValidateChecksumAlgorithm(algorithm);
 
-			remotePath = remotePath.GetFtpPath();
+			remotePath = SanitizerModule.SanitizePath(this, remotePath);
 
 			LogFunction(nameof(GetChecksum), new object[] { remotePath });
 

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using FluentFTP.Rules;
 using FluentFTP.Helpers;
 using FluentFTP.Exceptions;
+using FluentFTP.Client.Modules;
 
 namespace FluentFTP {
 	public partial class FtpClient {
@@ -47,7 +48,7 @@ namespace FluentFTP {
 			localFolder = localFolder.EnsurePostfix(Path.DirectorySeparatorChar.ToString());
 
 			// cleanup the remote path
-			remoteFolder = remoteFolder.GetFtpPath().EnsurePostfix("/");
+			remoteFolder = SanitizerModule.SanitizePath(this, remoteFolder).EnsurePostfix("/");
 
 			LogFunction(nameof(DownloadDirectory), new object[] { localFolder, remoteFolder, mode, existsMode, verifyOptions, (rules.IsBlank() ? null : rules.Count + " rules") });
 
@@ -68,7 +69,7 @@ namespace FluentFTP {
 			var shouldExist = new Dictionary<string, bool>();
 
 			// loop through each file and transfer it
-			var toDownload = GetFilesToDownload(localFolder, remoteFolder, rules, results, listing, shouldExist);
+			var toDownload = FileDownloadModule.GetFilesToDownload(this, localFolder, remoteFolder, rules, results, listing, shouldExist);
 			DownloadServerFiles(toDownload, existsMode, verifyOptions, progress);
 
 			// delete the extra local files if in mirror mode

@@ -65,7 +65,7 @@ namespace FluentFTP.Client.BaseClient {
 			// gets here it means the certificate on the control connection object being
 			// cloned was already accepted.
 			write.ValidateCertificate += new FtpSslValidation(
-				delegate (BaseFtpClient obj, FtpSslValidationEventArgs e) { e.Accept = true; });
+				(BaseFtpClient _, FtpSslValidationEventArgs e) => e.Accept = true);
 
 		}
 
@@ -79,7 +79,12 @@ namespace FluentFTP.Client.BaseClient {
 		public void AutoDispose() {
 			if (Status.AutoDispose) {
 				if (this is AsyncFtpClient) {
-					((IAsyncFtpClient)this).DisposeAsync();
+#if NETSTANDARD2_1_OR_GREATER || NET5_0_OR_GREATER
+
+					Task.Run(() => ((IAsyncFtpClient)this).DisposeAsync()).Wait();
+#else
+					Task.Run(() => ((IAsyncFtpClient)this).Dispose()).Wait();
+#endif
 				}
 				else {
 					((IFtpClient)this).Dispose();
@@ -90,12 +95,15 @@ namespace FluentFTP.Client.BaseClient {
 		public void WaitForDaemonTermination() {
 			if (Config.Noop) {
 				LogWithPrefix(FtpTraceLevel.Verbose, "Waiting for Daemon termination(" + this.ClientType + ")");
-				Status.NoopDaemonTokenSource.Cancel();
+				Status.NoopDaemonTokenSource?.Cancel();
 				DateTime startTime = DateTime.UtcNow;
 				while (Status.NoopDaemonTask != null && Status.NoopDaemonTask.Status == TaskStatus.Running &&
 					DateTime.UtcNow.Subtract(startTime).TotalMilliseconds < 20000) {
 					Thread.Sleep(250);
 				}
+				Status.NoopDaemonTokenSource?.Dispose();
+				Status.NoopDaemonTokenSource = null;
+				Status.NoopDaemonTask = null;
 				LogWithPrefix(FtpTraceLevel.Verbose, "Daemon terminated");
 			}
 		}

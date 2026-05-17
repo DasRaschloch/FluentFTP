@@ -1,13 +1,7 @@
 ﻿using FluentFTP.Helpers;
 using FluentFTP.Model.Functions;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
-using System.Threading.Tasks;
+using System.Text;
 using Xunit;
-using Xunit.Sdk;
 
 namespace FluentFTP.Tests.Unit {
 	public class HelperTests {
@@ -18,7 +12,28 @@ namespace FluentFTP.Tests.Unit {
 			var obj = new FtpAutoDetectConfig();
 			var txt = ValuePrinter.ObjectToString(obj);
 
-			Assert.Equal("CloneConnection = True, FirstOnly = True, IncludeImplicit = True, AbortOnTimeout = True, RequireEncryption = False, ProtocolPriority = [Tls11, Tls12]", txt);
+			Assert.Equal("CloneConnection = True, FirstOnly = True, IncludeImplicit = True, AbortOnTimeout = True, RequireEncryption = False, ProtocolPriority = [Tls12]", txt);
+		}
+
+		[Fact]
+		public void EncodingToCode_UTF8() {
+			var enc = Encoding.UTF8;
+			var result = Encodings.ToCode(enc);
+			Assert.Equal("System.Text.Encoding.UTF8", result);
+		}
+
+		[Fact]
+		public void EncodingToCode_ASCII() {
+			var enc = Encoding.ASCII;
+			var result = Encodings.ToCode(enc);
+			Assert.Equal("System.Text.Encoding.ASCII", result);
+		}
+
+		[Fact]
+		public void EncodingToCode_GetEncoding() {
+			var enc = Encoding.GetEncoding("iso-8859-1");
+			var result = Encodings.ToCode(enc);
+			Assert.Equal("System.Text.Encoding.GetEncoding(\"iso-8859-1\")", result);
 		}
 
 	}

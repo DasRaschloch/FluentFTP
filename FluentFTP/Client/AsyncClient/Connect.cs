@@ -63,29 +63,29 @@ namespace FluentFTP {
 				throw new ObjectDisposedException("This AsyncFtpClient object has been disposed. It is no longer accessible.");
 			}
 
-			if (m_stream == null) {
+			if (m_stream != null && IsConnected) {
+				// After this call m_stream will be null and IsConnected will be false
+				await ((IInternalFtpClient)this).DisconnectInternal(token); 
+			}
+
+			if (m_stream == null || IsConnected) {
 				m_stream = new FtpSocketStream(this);
 				m_stream.ValidateCertificate += new FtpSocketStreamSslValidation(FireValidateCertficate);
-			}
-			else {
-				if (IsConnected) {
-					await ((IInternalFtpClient)this).DisconnectInternal(token);
-				}
 			}
 
 			if (Host == null) {
 				throw new FtpException("No host has been specified");
 			}
 
-			if (m_capabilities == null) {
-				m_capabilities = new List<FtpCapability>();
-			}
+			m_capabilities ??= new List<FtpCapability>();
 
 			Status.Reset(reConnect);
 			m_stream.SslSessionLength = 0;
 
 			m_hashAlgorithms = FtpHashAlgorithm.NONE;
 			m_stream.ConnectTimeout = Config.ConnectTimeout;
+			m_stream.ReadTimeout = Config.ReadTimeout;
+			m_stream.WriteTimeout = Config.WriteTimeout;
 			await ConnectAsync(m_stream, token);
 
 			m_stream.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, Config.SocketKeepAlive);
@@ -155,6 +155,24 @@ namespace FluentFTP {
 				}
 			}
 
+			if (m_stream.IsEncrypted && Config.EncryptAuthenticationOnly) {
+				if (HasFeature(FtpCapability.CCC)) {
+					reply = await Execute("CCC", token);
+					if (reply.Success) {
+						await m_stream.DeActivateEncryptionAsync(token);
+						Config.EncryptionMode = FtpEncryptionMode.None;
+					}
+					else {
+						LogWithPrefix(FtpTraceLevel.Error, "Fallback to plaintext failed");
+						throw new FtpException("Fallback to plaintext failed");
+					}
+				}
+				else {
+					LogWithPrefix(FtpTraceLevel.Error, "Fallback to plaintext not supported");
+					throw new FtpException("Fallback to plaintext not supported");
+				}
+			}
+
 			// Enable UTF8 if the encoding is ASCII and UTF8 is supported
 			if (m_textEncodingAutoUTF && m_textEncoding == Encoding.ASCII && HasFeature(FtpCapability.UTF8)) {
 				m_textEncoding = Encoding.UTF8;
@@ -179,9 +197,7 @@ namespace FluentFTP {
 			}
 
 			// Set a FTP server handler if a custom handler has not already been set
-			if (ServerHandler == null) {
-				ServerHandler = ServerModule.GetServerHandler(m_serverType);
-			}
+			ServerHandler ??= ServerModule.GetServerHandler(m_serverType);
 
 			LogWithPrefix(FtpTraceLevel.Verbose, "Active ServerHandler is: " + (ServerHandler == null ? "None" : ServerHandler.ToEnum().ToString()));
 
@@ -235,10 +251,11 @@ namespace FluentFTP {
 
 			// FIX #922: disable checking for stale data during connection
 			Status.AllowCheckStaleData = true;
-						Status.InCriticalSequence = false;
+			Status.InCriticalSequence = false;
 
 			if (Config.Noop) {
 				if (Status.NoopDaemonTask == null) {
+					Status.NoopDaemonTokenSource ??= new CancellationTokenSource();
 					Status.NoopDaemonTask = Task.Factory.StartNew(() => { NoopDaemon(Status.NoopDaemonTokenSource.Token); }, Status.NoopDaemonTokenSource.Token);
 				}
 				Status.NoopDaemonEnable = true;

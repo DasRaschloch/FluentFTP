@@ -9,6 +9,7 @@ using FluentFTP.Exceptions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Security.Authentication;
+using FluentFTP.Client.Modules;
 
 namespace FluentFTP {
 	public partial class AsyncFtpClient {
@@ -17,7 +18,7 @@ namespace FluentFTP {
 		/// Upload the given stream to the server as a new file asynchronously. Overwrites the file if it exists.
 		/// Writes data in chunks. Retries if server disconnects midway.
 		/// </summary>
-		protected async Task<FtpStatus> UploadFileInternalAsync(Stream fileData, string localPath, string remotePath, bool createRemoteDir,
+		protected virtual async Task<FtpStatus> UploadFileInternalAsync(Stream fileData, string localPath, string remotePath, bool createRemoteDir,
 			FtpRemoteExists existsMode, bool fileExists, bool fileExistsKnown, IProgress<FtpProgress> progress, CancellationToken token, FtpProgress metaProgress) {
 
 			Stream upStream = null;
@@ -64,7 +65,7 @@ namespace FluentFTP {
 					remoteFileLen = remotePosition = await GetFileSize(remotePath, 0, token);
 
 					// calculate the local position for appending / resuming
-					localPosition = CalculateAppendLocalPosition(remotePath, existsMode, remotePosition);
+					localPosition = FileTransferModule.CalculateAppendLocalPosition(remotePath, existsMode, remotePosition);
 
 				}
 				else {
@@ -102,7 +103,7 @@ namespace FluentFTP {
 							remoteFileLen = remotePosition = await GetFileSize(remotePath, 0, token);
 
 							// calculate the local position for appending / resuming
-							localPosition = CalculateAppendLocalPosition(remotePath, existsMode, remotePosition);
+							localPosition = FileTransferModule.CalculateAppendLocalPosition(remotePath, existsMode, remotePosition);
 						}
 
 					}
@@ -158,7 +159,7 @@ namespace FluentFTP {
 				// calculate chunk size and rate limiting
 				const int rateControlResolution = 100;
 				long rateLimitBytes = Config.UploadRateLimit != 0 ? (long)Config.UploadRateLimit * 1024 : 0;
-				var chunkSize = CalculateTransferChunkSize(rateLimitBytes, rateControlResolution);
+				var chunkSize = FileTransferModule.CalculateTransferChunkSize(this, rateLimitBytes, rateControlResolution);
 
 				// calc desired length based on the mode (if need to append to the end of remote file, length is sum of local+remote)
 				var remoteFileDesiredLen = (existsMode is FtpRemoteExists.AddToEnd or FtpRemoteExists.AddToEndNoCheck) ?
@@ -179,6 +180,7 @@ namespace FluentFTP {
 				}
 
 				Status.NoopDaemonAnyNoops = 0;
+				bool reached100Percent = false;
 
 				// loop till entire file uploaded
 				while (localFileLen == 0 || localPosition < localFileLen) {
@@ -192,8 +194,6 @@ namespace FluentFTP {
 						while ((readBytes = await fileData.ReadAsync(buffer, 0, buffer.Length, token)) > 0) {
 							// write chunk to the FTP stream
 							await upStream.WriteAsync(buffer, 0, readBytes, token);
-							await upStream.FlushAsync(token);
-
 
 							// move file pointers ahead
 							localPosition += readBytes;
@@ -204,6 +204,9 @@ namespace FluentFTP {
 							// send progress reports
 							if (progress != null) {
 								ReportProgress(progress, localFileLen, localPosition, bytesProcessed, DateTime.Now - transferStarted, localPath, remotePath, metaProgress);
+								if (upStream.Position >= upStream.Length) {
+									reached100Percent = true;
+								}
 							}
 
 							// honor the rate limit
@@ -259,23 +262,43 @@ namespace FluentFTP {
 					}
 				}
 
-				// wait for transfer to get over
-				while (upStream.Position < upStream.Length) {
+				try {
+					// flush any buffered data first
+					await upStream.FlushAsync(token);
+
+					// wait until the stream reports that all bytes have been written
+					// (some stream implementations update Position asynchronously)
+					try {
+						while (upStream.Position < upStream.Length) {
+							await Task.Delay(50, token);
+						}
+						// a short extra pause to give the OS socket layer time to drain
+						await Task.Delay(100, token);
+					}
+					catch (OperationCanceledException) {
+						throw;
+					}
+				}
+				catch (Exception ex) {
+					LogWithPrefix(FtpTraceLevel.Info, "Error waiting for data stream to complete: " + ex.ToString());
 				}
 
 				sw.Stop();
 
+				// send a last final progress report unless we already reached 100% in the loop above, because some stream implementations update
+				// Position asynchronously and might not report 100% in the loop above
+				if (!reached100Percent) {
+					progress?.Report(new FtpProgress(100.0, upStream.Length, 0, TimeSpan.FromSeconds(0), localPath, remotePath, metaProgress));
+				}
+
 				long tot = upStream.Position;
 				long ems = sw.ElapsedMilliseconds;
-				string bps = ems == 0 ? "?" : (tot / ems * 1000L).FileSizeToString();
+				string bps = ems == 0 ? "?" : (tot * 1000L / ems).FileSizeToString();
 				string successText = "Uploaded " + tot + " bytes, " + sw.Elapsed.ToShortString() + ", " + bps + "/s";
 				if (Config.Noop) {
 					successText += ", " + Status.NoopDaemonAnyNoops + " NOOPs";
 				}
 				LogWithPrefix(FtpTraceLevel.Verbose, successText);
-
-				// send progress reports
-				progress?.Report(new FtpProgress(100.0, upStream.Length, 0, TimeSpan.FromSeconds(0), localPath, remotePath, metaProgress));
 
 				// disconnect FTP stream before exiting
 				await ((FtpDataStream)upStream).DisposeAsync();
@@ -343,7 +366,11 @@ namespace FluentFTP {
 				// if resume possible
 				if (ex.IsResumeAllowed()) {
 					// dispose the old bugged out stream
-					await ((FtpDataStream)upStream).DisposeAsync();
+#if NET5_0_OR_GREATER || NETSTANDARD2_1_OR_GREATER
+					await upStream.DisposeAsync();
+#else
+					upStream.Dispose();
+#endif
 					LogWithPrefix(FtpTraceLevel.Info, "Attempting upload resume at position " + remotePosition);
 
 					// create and return a new stream starting at the current remotePosition

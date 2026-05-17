@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+
 using FluentFTP.Client.Modules;
+using FluentFTP.Exceptions;
 using FluentFTP.Helpers;
 
 namespace FluentFTP.Client.BaseClient {
@@ -14,6 +16,16 @@ namespace FluentFTP.Client.BaseClient {
 		/// <param name="command">The command to execute</param>
 		/// <returns>The servers reply to the command</returns>
 		FtpReply IInternalFtpClient.ExecuteInternal(string command) {
+			return ((IInternalFtpClient)this).ExecuteInternal(command, -1);
+		}
+
+		/// <summary>
+		/// Executes a command
+		/// </summary>
+		/// <param name="command">The command to execute</param>
+		/// <param name="linesExpected">-1 normal operation, 0 accumulate until timeOut, >0 accumulate until n msgs received</param>
+		/// <returns>The servers reply to the command</returns>
+		FtpReply IInternalFtpClient.ExecuteInternal(string command, int linesExpected) {
 			FtpReply reply;
 
 			bool reconnect = false;
@@ -62,6 +74,11 @@ namespace FluentFTP.Client.BaseClient {
 				}
 				LogWithPrefix(FtpTraceLevel.Warn, "Reconnect needed due to " + reconnectReason + " control connection" + sslLengthInfo);
 
+				if (Config.SelfConnectMode == FtpSelfConnectMode.Never ||
+				   ((Status.ConnectCount == 0) && Config.SelfConnectMode == FtpSelfConnectMode.OnConnectionLost)) {
+					throw new FtpException("A " + ((Status.ConnectCount == 0) ? "C" : "Rec") + "onnect needed but forbidden by the client config (\"SelfConnectMode\")");
+				}
+
 				if (IsConnected) {
 					if (Status.LastWorkingDir == null) {
 						Status.InCriticalSequence = true;
@@ -101,7 +118,7 @@ namespace FluentFTP.Client.BaseClient {
 				LastCommandTimestamp = DateTime.UtcNow;
 
 				// get the reply
-				reply = ((IInternalFtpClient)this).GetReplyInternal(command, false, 0, false);
+				reply = ((IInternalFtpClient)this).GetReplyInternal(command, false, 0, false, linesExpected);
 			}
 			finally {
 				m_daemonSemaphore.Release();
@@ -127,11 +144,14 @@ namespace FluentFTP.Client.BaseClient {
 
 			// CWD LastWorkingDir
 			if (command.ToUpper().TrimEnd() == "CWD" || command.ToUpper().StartsWith("CWD ", StringComparison.Ordinal)) {
-				// At least for a successful absolute Unix CWD, we know where we are.
-				string parms = command.Length <= 4 ? string.Empty : command.Substring(4);
-				if (parms.IsAbsolutePath()) {
-					Status.LastWorkingDir = parms;
-					return;
+				if (Config.PreserveTrailingSlashCmdList == null || !Config.PreserveTrailingSlashCmdList.Contains("CWD")) {
+					// Only assume the following for normal processing
+					// At least for a successful absolute Unix CWD, we know where we are.
+					string parms = command.Length <= 4 ? string.Empty : command.Substring(4);
+					if (parms.IsAbsolutePath()) {
+						Status.LastWorkingDir = parms;
+						return;
+					}
 				}
 
 				// Sadly, there are cases where a successful CWD does not let us easily

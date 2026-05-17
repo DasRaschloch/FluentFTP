@@ -6,6 +6,7 @@ using FluentFTP.Helpers;
 using FluentFTP.Exceptions;
 using System.Data;
 using FluentFTP.Rules;
+using FluentFTP.Client.Modules;
 
 namespace FluentFTP {
 	public partial class FtpClient {
@@ -41,14 +42,14 @@ namespace FluentFTP {
 
 			// verify args
 			if (!errorHandling.IsValidCombination()) {
-				throw new ArgumentException("Invalid combination of FtpError flags.  Throw & Stop cannot be combined");
+				throw new ArgumentException("Invalid combination of FtpError flags.  Throw & Stop cannot be combined", nameof(errorHandling));
 			}
 
 			if (remoteDir.IsBlank()) {
 				throw new ArgumentException("Required parameter is null or blank.", nameof(remoteDir));
 			}
 
-			remoteDir = remoteDir.GetFtpPath();
+			remoteDir = SanitizerModule.SanitizePath(this, remoteDir);
 
 			LogFunction(nameof(UploadFiles), new object[] { localPaths, remoteDir, existsMode, createRemoteDir, verifyOptions, errorHandling });
 
@@ -73,7 +74,7 @@ namespace FluentFTP {
 
 			// check which files should be uploaded or filtered out based on rules
 			var filesToUpload = GetFilesToUpload2(localPaths, remoteDir, rules, results, shouldExist);
-			var existingFiles = checkFileExistence ? GetNameListing(GetAbsoluteDir(remoteDir)) : new string[0];
+			var existingFiles = checkFileExistence ? GetNameListing(GetAbsoluteDir(remoteDir)) : Array.Empty<string>();
 
 			// per local file
 			var r = -1;
@@ -85,11 +86,13 @@ namespace FluentFTP {
 
 				// try to upload it
 				try {
-					var ok = UploadFileFromFile(result.LocalPath, result.RemotePath, false, existsMode, FileListings.FileExistsInNameListing(existingFiles, result.RemotePath), true, verifyOptions, progress, metaProgress);
-					
+					var existsInListing = FileListings.FileExistsInNameListing(this, existingFiles, result.RemotePath);
+					var ok = UploadFileFromFile(result.LocalPath, result.RemotePath, false, existsMode, existsInListing, true, verifyOptions, progress, metaProgress);
+
 					// mark that the file succeeded
 					result.IsSuccess = ok.IsSuccess();
-					result.IsSkipped = ok == FtpStatus.Skipped;
+					result.IsSkipped = ok.IsSkipped();
+					result.IsFailed = ok.IsFailure();
 
 					if (ok.IsSuccess()) {
 						successfulUploads.Add(result.RemotePath);
@@ -102,7 +105,7 @@ namespace FluentFTP {
 					}
 				}
 				catch (Exception ex) {
-				
+
 					// mark that the file failed
 					result.IsFailed = true;
 					result.Exception = ex;
@@ -196,7 +199,7 @@ namespace FluentFTP {
 				remoteFilePath = GetAbsoluteFilePath(remoteDir, fileName);
 
 				// record that this file should be uploaded
-				RecordFileToUpload(rules, results, shouldExist, filesToUpload, localPath, remoteFilePath);
+				FileUploadModule.RecordFileToUpload(this, rules, results, shouldExist, filesToUpload, localPath, remoteFilePath);
 			}
 
 			return filesToUpload;
